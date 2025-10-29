@@ -5,6 +5,10 @@ import task from "../../../assets/task.png";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation"; 
+import { getDoc, doc, updateDoc } from "firebase/firestore";
+import { firebase } from "@/lib/firebaseConfig";
+import { supabase } from "@/lib/supabaseClient";
+import { create } from "domain";
 
 export default function Page() {
   const router = useRouter();
@@ -22,11 +26,22 @@ export default function Page() {
   //ดึงข้อมูลจาก supabase ตาม id ที่ได้มาจาก url
   useEffect(() => {
     //ดึงข้อมูลจาก supabase
-    async function fetchData(){}
-
-
-
-
+    async function fetchData() {
+      try {
+        const docRef = doc(firebase, "task", id as string);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          setTitle(docSnap.data().title);
+          setDetail(docSnap.data().detail);
+          setIs_completed(docSnap.data().is_completed);
+          setPreviewfile(docSnap.data().image_url);
+          setOld_image_url(docSnap.data().image_url);
+        }
+      } catch (error) {
+        alert("พบปัญหาในการดึงข้อมูล...")
+        console.log(error);
+      }
+    }
 
     fetchData();
   },[])
@@ -42,13 +57,94 @@ export default function Page() {
   async function handleUploadAndUpdate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     //อัปโหลดรูปภาพ
-    
-    
-    
-    
+    //สร้างตัวแปรเก็บ url รูปภาพ
+   let image_URL = preview_file || '';
+     
+   if(image_url){
+     //----ลบรูปเก่าก่อนอัปขึ้นรูปใหม่----
+     if(old_image_url!=""){
+     const image_name = image_URL.split('/').pop() as string;
+     
+   await supabase.storage
+     .from('task_bk')
+     .remove([image_name]);
+     //ถ้ามี error ให้แสดง alert แต่ไม่ต้องหยุดการทำงาน
+     
+   }
+     //---------------------------
+           //ถ้ามีการเลือกรูป ก็จะอัปโหลด
+           //ตั้งชื่อไฟล์รูปใหม่ไม่ให้ซ้ำกัน
+           const new_image_file_name = `${Date.now()}-${image_url.name}`;
+     
+           //อัปโหลดรูปไปเก็บไว้ที่ storage
+           const {data, error} = await supabase.storage
+             .from('task_bk')
+             .upload(new_image_file_name, image_url)
+     
+           //หลังอัปโหลด ตรวจสอบว่ามี error ไหม
+           //มี error แสดง alert หากไม่่มี ให้ get url ของรูปที่อัปโหลด เก็บไว้ในตัวแปร image_url
+           if(error){
+             alert("พบปัญหาในการอัปโหลดรูปภาพ กรุณาลองใหม่")
+             console.log(error.message);
+             return;
+           }else{
+             // get url ของรูปที่อัปโหลด
+             const { data } = supabase.storage
+               .from('task_bk')
+               .getPublicUrl(new_image_file_name);
+             
+             image_URL = data.publicUrl;
+           }
+         } 
+   //แก้ไขข้อมูลในตาราง
+   const {data, error} = await supabase
+   .from('task_db')
+   .update({
+     title: title,
+     detail: detail,
+     is_completed: is_completed,
+     image_url: image_URL,
+     update_at: new Date().toISOString(),
+   }
+   )
+   .eq('id', id)
+   if(error){
+       //แสดง alert
+       alert("พบปัญหาในการบันทึกข้อมูล กรุณาลองใหม่");
+       console.log(error.message);
+       return;
+     }else{
+       //บันทึกข้อมูลสำเร็จ
+       alert("บันทึกข้อมูลสำเร็จ");
+       //clear strate
+       setTitle("");
+       setDetail("");
+       setIs_completed(false);
+       setImage_url(null);
+       setPreviewfile(null);
+       image_URL = '';
+       //แล้ว re-direct ไปหน้าหลัก (/alltask)
+       router.push("/alltask");
+     }
+ 
+ //----แก้ไขข้อมูลใน firebase
+ try{
+  await updateDoc(doc(firebase, "task", id as string), {
+    title: title,
+    detail: detail,
+    is_completed: is_completed,
+    image_url: image_URL,
+    update_at: new Date().toISOString(),
+  })
+  alert("แก้ไขข้อมูลสำเร็จ");
+  router.push("/alltask");
 
-    
-  }
+ }catch(error){
+  alert("พบปัญหาในการแก้ไขข้อมูล กรุณาลองใหม่");
+  console.log(error);
+  return;
+ }
+}
 
   return (
     // ส่วนหัว

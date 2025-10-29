@@ -5,7 +5,8 @@ import task from "../../assets/task.png";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { firebase } from "@/lib/firebaseConfig";
-import { collection, getDocs, } from "firebase/firestore";
+import { collection, getDocs, deleteDoc, doc } from "firebase/firestore";
+import { supabase } from "@/lib/supabaseClient";
 
 //สร้างประเภทตัวแปร เก็บข้อมูลจาก firebase
 type Task = {
@@ -47,13 +48,28 @@ useEffect(() => {
 async function handleDeleteTaskClick(id: string, image_URL: string) {
   //แสดง confirm dialog
   if( confirm("คุณต้องการลบข้อมูลใช่หรือไม่?") ){
-    //ลบรูปออก
+    //ลบรูปออก storage ใน supabase (ถ้ามี)
+    if(image_URL){
+      const image_name = image_URL.split('/').pop() as string;
+  
+    await supabase.storage
+      .from('task_bk')
+      .remove([image_name]);
+    }
+    //ลบข้อมูลจาก database ใน firebase
+    try{
+      //ลบข้อมูลออกจาก firebase
+      await deleteDoc(doc(firebase, "task", id));
 
-    //ลบข้อมูลจาก database
+    }catch(error){
+      alert("พบปัญหานการลบข้อมูล");
+      console.log(error);
+        return;
+    }
     
     //ลบข้อมูลออกจากรายการที่แสดงบนหน้าจอ
     setTasks(tasks.filter((task) => task.id !== id) );
-}
+  }
 }
 
   return (
